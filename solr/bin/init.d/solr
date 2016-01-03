@@ -62,17 +62,46 @@ if [ $? -ne 0 ]; then
   exit 1
 fi
 
+status_by_pid() {
+    test -f $SOLR_ENV && source $SOLR_ENV
+    SOLR_PORT=${SOLR_PORT:-8983}
+    SOLR_TIP=$(readlink -f $SOLR_INSTALL_DIR)
+    SOLR_PID_DIR=${SOLR_PID_DIR:-${SOLR_TIP}/bin}
+    if [ -f ${SOLR_PID_DIR}/solr-${SOLR_PORT}.pid ]; then
+      PID=$(cat ${SOLR_PID_DIR}/solr-${SOLR_PORT}.pid)
+      kill -HUP $PID > /dev/null 2>&1
+      if [ $? -gt 0 ]; then
+        echo "PID file exists but process seems to be dead"
+        return 1
+      else
+        return 0
+      fi
+    else
+      return 1
+    fi
+}
+
 case "$1" in
-  start|stop|restart|status)
+  start|stop|restart)
     SOLR_CMD="$1"
+    if [ -n "$RUNAS" ]; then
+      su -c "SOLR_INCLUDE=\"$SOLR_ENV\" \"$SOLR_INSTALL_DIR/bin/solr\" $SOLR_CMD" - "$RUNAS"
+    else
+      SOLR_INCLUDE="$SOLR_ENV" "$SOLR_INSTALL_DIR/bin/solr" "$SOLR_CMD"
+    fi
+    ;;
+  status)
+    SOLR_CMD="$1"
+    if [ -n "$RUNAS" ]; then
+      su -c "SOLR_INCLUDE=\"$SOLR_ENV\" \"$SOLR_INSTALL_DIR/bin/solr\" $SOLR_CMD" - "$RUNAS"
+    else
+      SOLR_INCLUDE="$SOLR_ENV" "$SOLR_INSTALL_DIR/bin/solr" "$SOLR_CMD"
+    fi
+    status_by_pid
+    exit $?
     ;;
   *)
     echo "Usage: $0 {start|stop|restart|status}"
     exit
 esac
 
-if [ -n "$RUNAS" ]; then
-  su -c "SOLR_INCLUDE=\"$SOLR_ENV\" \"$SOLR_INSTALL_DIR/bin/solr\" $SOLR_CMD" - "$RUNAS"
-else
-  SOLR_INCLUDE="$SOLR_ENV" "$SOLR_INSTALL_DIR/bin/solr" "$SOLR_CMD"
-fi
